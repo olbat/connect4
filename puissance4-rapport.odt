@@ -1,0 +1,101 @@
+﻿
+
+
+
+
+
+
+Projet de RS : jeu de Puissance 4
+Rapport de projet
+
+
+Sommaire
+Introductions	4
+Les modifications du protocole	5
+Lancement d'un défi	5
+Actualisation de la liste de joueurs	6
+Message signalant l'abandon d'un joueur	7
+Message signalant qu'un pseudonyme est déjà utilisé	8
+Les applications	9
+Le client	9
+Utilisation	9
+Fonctionnement	9
+Structure	10
+Le serveur	11
+Utilisation	11
+Fonctionnement	11
+Structure	11
+
+Introductions
+Lors de l'implémentation du jeu, nous avons rencontrés plusieurs problèmes du au protocole. Celui-ci n'était pas assez complet, notamment pour gérer les cas suivant : 
+Prévenir un joueur qu'il est défié, lui permettre d'accepter ou de refuser le défi
+Actualiser la liste de joueurs sur les clients une fois ceux-ci connectés au serveur
+Prévenir un joueur que son pseudo est déjà utilisé
+Prévenir un joueur quand son adversaire abandonne la partie
+Empêcher un utilisateur de s'auto-défier
+Dans l'optique de corriger ces problèmes, nous avons du modifier le protocole, il se peut donc que les scripts de tests utilisés pour la correction ne fonctionnent pas correctement avec ces applications.
+
+Les modifications du protocole
+Lancement d'un défi
+Le système proposé par le protocole de base ne permet pas d'annoncer à un joueur qu'on tente de le défier, nous avons donc rajouter une requête au protocole pour palier à ce problème.
+Le lancement d'un défi se déroule de la façon suivante:
+Le client A défi le client B qui accepte (DEFI OK) ou refuse (DEFI NO) la proposition.
+
+Actualisation de la liste de joueurs
+Pour permettre l'actualisation de la liste de joueurs par les clients de la façon la plus efficace possible, nous avons décidé d'utiliser l'approche de certains autres serveurs de jeu (Quake et dérivés, ...).
+Le serveur écoute donc sur un nouveau port spécifique et possède un processus léger chargé uniquement de répondre aux client désirant actualiser leur liste. A chaque connexion sur le port d'écoute spécifique, le serveur envoi la liste de joueurs puis cloture la connexion.
+Les clients possèdent un processus léger chargé uniquement de contacter le serveur périodiquement pour réactualiser la liste.
+Cette approche permet également d'envisager d'autre possibilités, comme par exemple l'affichage des joueurs connectés sur une page web.
+
+Message signalant l'abandon d'un joueur
+Comme aucun moyen n'existait, avec le protocole fourni, de prévenir un joueur que son adversaire quitte la partie, nous avons mis à jour le protocole. Il est ainsi possible de stopper le jeu chez le client qui est seul dans la partie.
+
+
+Message signalant qu'un pseudonyme est déjà utilisé
+Nous avons rajouté une requête HELLO ERR au protocole permettant de signaler, par exemple, à un utilisateur que son pseudonyme est déjà utilisé.
+
+
+
+
+
+
+
+
+
+Les applications
+Le client
+Utilisation
+Le client se lance de la façon suivante :
+./client [pseudonyme] [adresse IP du serveur]
+Si le pseudonyme n'est pas spécifié, un pseudonyme est attribué d'office.
+Si l'adresse IP du serveur n'est pas spécifiée, le client tentera de se connecter en local.
+Fonctionnement
+Lors du lancement du client, celui-ci créer immédiatement deux processus légers, un premier qui se charge de maintenir la liste de joueurs à jour, un second qui s'occupe de lire les messages envoyés par le serveur (permet de filtrer les messages relatifs au chat des autres messages).
+Nous avions choisi de faire transiter les messages relatifs au chat à travers une autre connexion (sur un autre port) . Cependant, nous sommes conscient que cette méthode offre la possibilité à des personnes qui ne sont pas connectées au jeu d'envoyer des messages au joueurs (problème de sécurité), mais pour des problèmes de simplicité d'implémentation (côté serveur), nous avons tout de même choisi de conserver cette façon de faire. Nous avons aussi imaginé un système permettant de palier au trou de sécurité, il suffirait d'attribuer une clé « secrete » au client lors de sa connexion, par la suite, à la transmission de chaque message, le client en question devrait préciser la clé  l'identifiant. Pour des soucis de respect du protocole de base, nous n'avons pas implémenté cette méthode sécurisante. Dans tous les cas comme nous utilisons TCP pour le service de message, il est possible d'identifier clairement les clients (et éventuellement de vérifier que la personne se connectant pour envoyer un message est bien connecté sur le serveur en tant que joueur), ce qui limite en partie les risques liés à la sécurité (IP spoofing ...).
+Suite au lancement de ces deux processus légers, un autre processus est créer pour écouter si un joueur tente de défier le client, le processus léger « principal » se chargeant de proposer un menu interactif au joueur (lancement d'une partie, affichage de la liste des joueurs, affichage de l'aide, ...).
+A partir de ce moment, le client peut soit envoyer une demande de défi à un autre joueur, soit en recevoir une d'un autre joueur.
+Lors du lancement d'une partie on coupe le processus léger qui se charge d'écouter les demandes de défi et on lance la partie à partir du processus léger « principal ».
+Une fois la partie terminée, on relance le processus léger d'écoute de demandes.
+Structure
+client.c : programme de base comprenant les fonctions des différents processus légers
+client_network.c : toutes les fonctions liées au réseau (connexion au serveur, actualisation de la liste, demande/réception de défi, réception de messages, ...)
+client_network_game.c : toutes les fonctions liées au réseau utiles lors d'une partie (jouer un coup, recevoir la grille actualisé, recevoir les messages signalant qu'un joueur a gagné, ...)
+client_game.c : toutes les fonctions liées au jeu (lancement d'une partie, jouer une partie, actualisation de la grille, ...)
+client_display.c : toutes les fonctions liées à l'affichage (affichage des menu, lectures des saisies de l'utilisateur, affichage des données liées au jeu, affichage des messages, ...)
+testclient.c : client de test permettant de saisir les messages à envoyer au serveur et d'afficher les messages reçu (threadé).
+Le serveur
+Utilisation
+Le serveur se lance de la façon suivante :
+./server
+Des messages d'informations sont ensuite affichés à l'écran.
+Fonctionnement
+Lors du lancement du client, celui-ci créer immédiatement deux processus légers, un premier permettant de gérer l'actualisation de la liste pour les clients (écoute sur un autre port) et un second utilisant la même méthode pour la transmission des messages liés au chat.
+Chaque client se connectant au serveur se voit attribué son propre processus léger.
+Au lancement d'une partie entre deux joueurs, le processus léger du second joueur (le joueur défié) est stoppé le temps de la partie, la partie étant lancé à partir du processus léger du premier joueur, puis relancé lors de la fin de la partie.
+Structure
+server.c : programme de base comprenant les fonctions des différents processus légers
+server_network.c : toutes les fonctions liées au réseau (connexion de clients, envoi de la liste, demandes de défi, réception de messages, ...)
+server_network_game.c : toutes les fonctions liées au réseau utiles lors d'une partie (réception d'un coup joué, envoyer la grille actualisée, envoyer les messages signalant qu'un joueur a gagné, ...)
+server_game.c :toutes les fonctions liées au jeu (lancement d'une partie, vérification de validité d'un coup, recherche d'un joueur gagnant, rechercher la direction lors qu'un joueur gagne, actualisation de la grille, ...)
+server_debug.c : différentes fonctions utiles lors de la phase de développement (affichage de la liste des utilisateurs, ... )
+testserver.c : serveur permettant de recevoir les messages des clients et de saisir les messages de réponses.
